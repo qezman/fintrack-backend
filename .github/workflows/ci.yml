@@ -1,0 +1,73 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: fintrack-backend
+  GITOPS_REPO: qezman/fintrack-gitops
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+        id: build
+
+      - name: Update image tag in gitops repo
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          GH_PAT: ${{ secrets.GITOPS_PAT }}
+        run: |
+          # Configure git identity for the commit
+          git config --global user.email "ci@fintrack.dev"
+          git config --global user.name "FinTrack CI"
+
+          git clone https://$GH_PAT@github.com/$GITOPS_REPO.git gitops
+
+          cd gitops
+
+          sed -i "s|$ECR_REGISTRY/$ECR_REPOSITORY:.*|$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG|g" \
+            manifests/backend/deployment.yaml
+
+          git add manifests/backend/deployment.yaml
+
+          # Only commit if something actually changed
+          git diff --staged --quiet || \
+            git commit -m "ci: update backend image to $IMAGE_TAG"
+
+          git push

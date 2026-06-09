@@ -1,25 +1,53 @@
-FROM node:20-alpine
-
-# Install sqlite dependencies
-RUN apk add --no-cache sqlite g++ make python3
+# Stage 1: Dependencies
+FROM node:20-alpine AS deps
 
 WORKDIR /app
 
 COPY package*.json ./
+COPY prisma ./prisma/
+
+RUN npm ci
+RUN npx prisma generate
+
+# Stage 2: Builder 
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY package*.json ./
+COPY tsconfig*.json ./
 
 RUN npm ci
 
-COPY . .
+# Copy Prisma client from deps stage
+COPY --from=deps /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=deps /app/node_modules/@prisma ./node_modules/@prisma
+
+# Copy source and compile TypeScript to dist/
+COPY src ./src
+COPY prisma ./prisma
 
 RUN npm run build
 
+# Stage 3: Production image
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S fastify -u 1001
+
+COPY package*.json ./
 RUN npm ci --omit=dev
 
-RUN mkdir -p uploads && chown -R node:node uploads
-RUN touch database.sqlite && chown node:node database.sqlite
+# Copy compiled output and Prisma client
+COPY --from=builder --chown=fastify:nodejs /app/dist ./dist
+COPY --from=builder --chown=fastify:nodejs /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=deps --chown=fastify:nodejs /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder --chown=fastify:nodejs /app/prisma ./prisma
 
-USER node
+USER fastify
 
 EXPOSE 3001
 
-CMD ["npm", "start"]
+CMD ["node", "dist/server.js"]
