@@ -18,8 +18,8 @@ if (!isAccelerate) {
   adapter = new PrismaPg(pool)
 }
 
-export const prisma = globalForPrisma.prisma ?? new PrismaClient(
-  isAccelerate ? { accelerateUrl: url } : { adapter }
-)
+const options: any = isAccelerate ? { accelerateUrl: url } : { adapter }
+
+export const prisma = globalForPrisma.prisma ?? new PrismaClient(options)
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
