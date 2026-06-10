@@ -1,25 +1,16 @@
-import { PrismaClient } from '@prisma/client'
-import { PrismaPg } from '@prisma/adapter-pg'
-import { Pool } from 'pg'
-import dotenv from 'dotenv'
-
-dotenv.config()
+import { PrismaClient } from "@prisma/client";
 
 const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined
-}
+  prisma: PrismaClient | undefined;
+};
 
-const url = process.env.DATABASE_URL || ''
-const isAccelerate = url.startsWith('prisma://') || url.startsWith('prisma+postgres://')
+export const prisma =
+  globalForPrisma.prisma ??
+  new PrismaClient({
+    log:
+      process.env.NODE_ENV === "development"
+        ? ["query", "error", "warn"]
+        : ["error"],
+  });
 
-let adapter
-if (!isAccelerate) {
-  const pool = new Pool({ connectionString: url })
-  adapter = new PrismaPg(pool)
-}
-
-const options: any = isAccelerate ? { accelerateUrl: url } : { adapter }
-
-export const prisma = globalForPrisma.prisma ?? new PrismaClient(options)
-
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
