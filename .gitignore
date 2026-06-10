@@ -5,3 +5,5 @@ database.sqlite-journal
 uploads/*
 .env
 .env.*
+
+/src/generated/prisma
