@@ -1,5 +1,5 @@
 # Stage 1: Dependencies
-FROM node:20-alpine AS deps
+FROM node:20-slim AS deps
 
 WORKDIR /app
 
@@ -10,7 +10,7 @@ RUN npm ci
 RUN npx prisma generate
 
 # Stage 2: Builder 
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
 
 WORKDIR /app
 
@@ -30,12 +30,12 @@ COPY prisma ./prisma
 RUN npm run build
 
 # Stage 3: Production image
-FROM node:20-alpine AS runner
+FROM node:20-slim AS runner
 
 WORKDIR /app
 
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S fastify -u 1001
+RUN groupadd -g 1001 -S nodejs && \
+    useradd -S fastify -u 1001
 
 COPY package*.json ./
 RUN npm ci --omit=dev
