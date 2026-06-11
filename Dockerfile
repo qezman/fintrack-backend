@@ -34,13 +34,12 @@ FROM node:20-slim AS runner
 
 WORKDIR /app
 
-RUN groupadd -g 1001 -S nodejs && \
-    useradd -S fastify -u 1001
+RUN groupadd -g 1001 nodejs && \
+    useradd -u 1001 -g nodejs -m fastify
 
 COPY package*.json ./
 RUN npm ci --omit=dev
 
-# Copy compiled output and Prisma client
 COPY --from=builder --chown=fastify:nodejs /app/dist ./dist
 COPY --from=builder --chown=fastify:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=deps --chown=fastify:nodejs /app/node_modules/@prisma ./node_modules/@prisma
