@@ -23,6 +23,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Prisma migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx prisma migrate deploy
+
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -53,21 +66,13 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           GH_PAT: ${{ secrets.GITOPS_PAT }}
         run: |
-          # Configure git identity for the commit
           git config --global user.email "ci@fintrack.dev"
           git config --global user.name "FinTrack CI"
-
           git clone https://$GH_PAT@github.com/$GITOPS_REPO.git gitops
-
           cd gitops
-
           sed -i "s|$ECR_REGISTRY/$ECR_REPOSITORY:.*|$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG|g" \
             manifests/backend/deployment.yaml
-
           git add manifests/backend/deployment.yaml
-
-          # Only commit if something actually changed
           git diff --staged --quiet || \
             git commit -m "ci: update backend image to $IMAGE_TAG"
-
           git push
