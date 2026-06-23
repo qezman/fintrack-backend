@@ -54,7 +54,7 @@ jobs:
         run: |
           aws eks update-kubeconfig --name fintrack-dev --region $AWS_REGION
           kubectl delete job prisma-migrate -n fintrack 2>/dev/null || true
-          cat <<JOBEOF | kubectl apply -f -
+          kubectl apply -f - <<JOBEOF
           apiVersion: batch/v1
           kind: Job
           metadata:
@@ -62,6 +62,7 @@ jobs:
             namespace: fintrack
           spec:
             ttlSecondsAfterFinished: 300
+            backoffLimit: 3
             template:
               spec:
                 restartPolicy: Never
@@ -73,7 +74,6 @@ jobs:
                     envFrom:
                       - secretRef:
                           name: fintrack-backend-secrets
-                backoffLimit: 3
           JOBEOF
           kubectl wait job/prisma-migrate -n fintrack \
             --for=condition=complete --timeout=120s
